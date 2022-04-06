@@ -16,22 +16,33 @@ Color toColor(Vec3<float> f) {
   return Color(f.x() * 255, f.y() * 255, f.z() * 255);
 }
 
-bool hitSphere(const Point3 &center, float radius, const ray &r) {
+float hitSphere(const Point3 &center, float radius, const ray &r) {
   Vec3f oc = r.origin() - center;
-  float a = dot(r.direction(), r.direction());
-  float b = 2.0 * dot(oc, r.direction());
-  float c = dot(oc, oc) - radius * radius;
-  float discriminant = b * b - 4 * a * c;
-  return (discriminant > 0);
+  float a = r.direction().lengthSquared();
+  float half_b = dot(oc, r.direction());
+  float c = oc.lengthSquared() - radius * radius;
+  float discriminant = half_b * half_b - a * c;
+
+  if (discriminant < 0) {
+    return -1.0;
+  } else {
+    return (-half_b - sqrt(discriminant)) / a;
+  }
 }
 
 Color rayColor(const ray &r) {
   Timer _("Ray shooting ");
 
-  Vec3<float> unitDirection = unitVector(r.direction());
-  float t = 0.5 * (unitDirection.y() + 1.0);
-  Vec3<float> colorInFloat =
-      (1.f - t) * Vec3<float>(1.f, 1.f, 1.f) + t * Vec3<float>(0.5f, 0.7f, 1.f);
+  float t = hitSphere({0, 0, -1}, 0.5, r);
+  if (t > 0) {
+    Vec3f N = unitVector(r.at(t) - Vec3f(0, 0, -1));
+    return toColor(0.5f * Vec3f(N.x() + 1, N.y() + 1, N.z() + 1));
+  }
+
+  Vec3f unitDirection = unitVector(r.direction());
+  t = 0.5 * (unitDirection.y() + 1.0);
+  Vec3f colorInFloat =
+      (1.f - t) * Vec3f(1.f, 1.f, 1.f) + t * Vec3f(0.5f, 0.7f, 1.f);
   return toColor(colorInFloat);
 }
 
@@ -55,9 +66,6 @@ int main() {
 
   Color image[IMAGE_HEIGHT][IMAGE_WIDTH];
 
-	Point3 sphereCenter(0, 0, -1);
-	float sphereRadius = 0.5;
-
   while (!glfwWindowShouldClose(win)) {
     renderer::startFrame();
     Profiler::draw();
@@ -69,11 +77,6 @@ int main() {
     ImGui::Text("FPS : %f", ImGui::GetIO().Framerate);
     ImGui::End();
 
-		ImGui::Begin("Contorles");
-		ImGui::SliderFloat("Radius", &sphereRadius, 1, 0);
-		ImGui::SliderFloat3("Center", &sphereCenter[0], -1, 1);
-		ImGui::End();
-
     // ==============================
     for (int i = 0; i < IMAGE_WIDTH; i++) {
       for (int j = 0; j < IMAGE_HEIGHT; j++) {
@@ -82,10 +85,7 @@ int main() {
 
         ray r(origin, lowerLeftCorner + u * horizontal + v * vertical - origin);
 
-        if (hitSphere(sphereCenter, sphereRadius, r))
-          image[IMAGE_HEIGHT - j - 1][IMAGE_WIDTH - i - 1] = {255, 0, 0};
-        else
-          image[IMAGE_HEIGHT - j - 1][IMAGE_WIDTH - i - 1] = rayColor(r);
+        image[IMAGE_HEIGHT - j - 1][IMAGE_WIDTH - i - 1] = rayColor(r);
       }
     }
     // ==============================
