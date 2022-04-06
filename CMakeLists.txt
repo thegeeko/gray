@@ -16,6 +16,8 @@ add_executable(raytrace
   src/main.cpp 
   src/window/window.cpp
   src/renderer/renderer.cpp
+
+	src/lib/timer.cpp
 )
 
 target_include_directories(raytrace PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")

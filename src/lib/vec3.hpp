@@ -100,3 +100,7 @@ template<typename T>
 inline Vec3<T> unitVector(Vec3<T> v) {
 	return v / v.length();
 }
+
+using Color = Vec3<uint8_t>;
+using Point3 = Vec3<float>;
+using Vec3f = Vec3<float>;

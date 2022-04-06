@@ -1,66 +1,103 @@
 #include <vector>
 
+#include "lib/ray.hpp"
+#include "lib/timer.hpp"
 #include "lib/vec3.hpp"
 #include "renderer/renderer.hpp"
 #include "window/window.hpp"
 
-constexpr int IMAGE_WIDTH = 1280;
-constexpr int IMAGE_HEIGHT = 720;
-
 using namespace std;
 
-void drawUi(vector<Vec3<uint8_t>>& image, uint32_t texture) {
-	// generating a texture
-	glBindTexture(GL_TEXTURE_2D, texture);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, IMAGE_WIDTH, IMAGE_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, image.data());
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);		// This is required on WebGL for non power-of-two textures
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);		// Same
+constexpr float ASPECT_RATIO = 16.f / 9.f;
+constexpr int IMAGE_WIDTH = 900;
+constexpr int IMAGE_HEIGHT = IMAGE_WIDTH / ASPECT_RATIO;
 
-	// imgui
-	ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse;
-	bool opened = true;
-	
-
-	renderer::startFrame();
-	ImGui::Begin("image", &opened, flags);
-	ImGui::Image((void*)texture, ImVec2(IMAGE_WIDTH, IMAGE_HEIGHT));
-	ImGui::End();
+Color toColor(Vec3<float> f) {
+  return Color(f.x() * 255, f.y() * 255, f.z() * 255);
 }
 
-void drawImage(std::vector<Vec3<uint8_t>>& image) {
-	for (int i = IMAGE_HEIGHT - 1; i >= 0; i--) {
-		for (int j = 0; j < IMAGE_WIDTH; j++) {
-			float r = (float)(i) / IMAGE_HEIGHT;
-			float g = (float)(j) / IMAGE_WIDTH;
-			float b = 0.25;
+bool hitSphere(const Point3 &center, float radius, const ray &r) {
+  Vec3f oc = r.origin() - center;
+  float a = dot(r.direction(), r.direction());
+  float b = 2.0 * dot(oc, r.direction());
+  float c = dot(oc, oc) - radius * radius;
+  float discriminant = b * b - 4 * a * c;
+  return (discriminant > 0);
+}
 
-			uint8_t ir = r * 255;
-			uint8_t ig = g * 255;
-			uint8_t ib = b * 255;
+Color rayColor(const ray &r) {
+  Timer _("Ray shooting ");
 
-			int pos = (i * IMAGE_WIDTH) + j;
-
-			image[pos][0] = ir;
-			image[pos][1] = ig;
-			image[pos][2] = ib;
-		}
-	}
+  Vec3<float> unitDirection = unitVector(r.direction());
+  float t = 0.5 * (unitDirection.y() + 1.0);
+  Vec3<float> colorInFloat =
+      (1.f - t) * Vec3<float>(1.f, 1.f, 1.f) + t * Vec3<float>(0.5f, 0.7f, 1.f);
+  return toColor(colorInFloat);
 }
 
 int main() {
-	auto win = window::init(IMAGE_WIDTH + 50, IMAGE_HEIGHT + 50);
+  auto win = window::init(1920, 1080);
 
-	GLuint texture;
-	glGenTextures(1, &texture);
-	std::vector<Vec3<uint8_t>> image(IMAGE_WIDTH * IMAGE_HEIGHT, {102, 28, 190});
+  float viewportHeight = 2.0;
+  float viewportWidth = ASPECT_RATIO * viewportHeight;
+  float focalLength = 1.0;
 
-	while (!glfwWindowShouldClose(win)) {
-		drawImage(image);
-		drawUi(image, texture);
-		renderer::render(win);
-	}
+  Point3 origin = {0, 0, 0};
+  Vec3f horizontal = Vec3f(viewportWidth, 0, 0);
+  Vec3f vertical = Vec3f(0, viewportHeight, 0);
+  Vec3f lowerLeftCorner =
+      origin - horizontal / 2.f - vertical / 2.f - Vec3f(0, 0, focalLength);
 
-	return 0;
+  renderer::Texture tex{};
+  tex.width = IMAGE_WIDTH;
+  tex.height = IMAGE_HEIGHT;
+  glGenTextures(1, &tex.texHandler);
+
+  Color image[IMAGE_HEIGHT][IMAGE_WIDTH];
+
+	Point3 sphereCenter(0, 0, -1);
+	float sphereRadius = 0.5;
+
+  while (!glfwWindowShouldClose(win)) {
+    renderer::startFrame();
+    Profiler::draw();
+
+    ImGui::Begin("info");
+    ImGui::Text("Width : %ipx", IMAGE_WIDTH);
+    ImGui::Text("Height : %ipx", IMAGE_HEIGHT);
+    ImGui::Text("Aspect Ratio : %f", ASPECT_RATIO);
+    ImGui::Text("FPS : %f", ImGui::GetIO().Framerate);
+    ImGui::End();
+
+		ImGui::Begin("Contorles");
+		ImGui::SliderFloat("Radius", &sphereRadius, 1, 0);
+		ImGui::SliderFloat3("Center", &sphereCenter[0], -1, 1);
+		ImGui::End();
+
+    // ==============================
+    for (int i = 0; i < IMAGE_WIDTH; i++) {
+      for (int j = 0; j < IMAGE_HEIGHT; j++) {
+        auto u = float(i) / (IMAGE_WIDTH - 1);
+        auto v = float(j) / (IMAGE_HEIGHT - 1);
+
+        ray r(origin, lowerLeftCorner + u * horizontal + v * vertical - origin);
+
+        if (hitSphere(sphereCenter, sphereRadius, r))
+          image[IMAGE_HEIGHT - j - 1][IMAGE_WIDTH - i - 1] = {255, 0, 0};
+        else
+          image[IMAGE_HEIGHT - j - 1][IMAGE_WIDTH - i - 1] = rayColor(r);
+      }
+    }
+    // ==============================
+
+    renderer::uploadToTexture((uint8_t *)image, tex);
+
+    ImGui::Begin("image");
+    ImGui::Image((void *)tex.texHandler, ImVec2(tex.width, tex.height));
+    ImGui::End();
+
+    renderer::render(win);
+  }
+
+  return 0;
 }
