@@ -30,7 +30,7 @@ private:
   void mDraw() {
     ImGui::Begin("Profiler");
     for (auto &[name, time] : data) {
-      ImGui::Text("%s took %lf", name.c_str(), time);
+      ImGui::Text("%s took %lf ms", name.c_str(), time);
     }
     ImGui::End();
   };

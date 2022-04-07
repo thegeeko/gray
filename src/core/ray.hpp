@@ -1,11 +1,11 @@
 #pragma once
 
-#include "lib/vec3.hpp"
+#include "vec3.hpp"
 
-class ray {
+class Ray {
 public:
-	ray() {}
-	ray(const Vec3<float>& origin, const Vec3<float>& direction):
+	Ray() {}
+	Ray(const Vec3<float>& origin, const Vec3<float>& direction):
 			orig(origin), dir(direction) {}
 
 	Vec3<float> origin() const { return orig; }
